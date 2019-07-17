@@ -1,5 +1,5 @@
 # PSGAN
-PyTorch implementation of PSGAN by Bergmann and Jetchev
+PyTorch implementation of PSGAN by [Bergmann and Jetchev](https://arxiv.org/abs/1805.03371)
 
 Example of learned single texture outputs:
 
