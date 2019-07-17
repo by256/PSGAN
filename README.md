@@ -1,5 +1,5 @@
 # PSGAN
-PyTorch implementation of PSGAN by [Bergmann and Jetchev](https://arxiv.org/abs/1805.03371)
+PyTorch implementation of PSGAN by [Bergmann and Jetchev](https://arxiv.org/abs/1705.06566)
 
 Examples of learned single texture honeycomb outputs:
 
