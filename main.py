@@ -6,25 +6,16 @@ import torch.nn as nn
 import torch.optim as optim
 
 from data_loaders import get_single_image_patches, load_dtd
-from noise_samplers import sample_Z_l, sample_z_g
+from noise_samplers import sample_Z_l, sample_Z_g
 from models import SingleTextureGenerator, MultiTextureGenerator, Discriminator
 
-
-
-def weights_init(m):
-    classname = m.__class__.__name__
-    if classname.find('Conv') != -1:
-        nn.init.normal_(m.weight.data, 0.0, 0.02)
-    elif classname.find('BatchNorm') != -1:
-        nn.init.normal_(m.weight.data, 1.0, 0.02)
-        nn.init.constant_(m.bias.data, 0)
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 device
 
-# single_image = 'honeycombed_0003.jpg'
-# train = get_single_image_patches(single_image, n=50, patch_size=160, resize=None)
-train = load_dtd('scaly/', n=20, patch_size=290, resize=480)
+single_image = 'honeycombed_0003.jpg'
+train = get_single_image_patches(single_image, n=10, patch_size=160, resize=480)
+# train = load_dtd('scaly/', n=1, patch_size=290, resize=480)
 
 epochs = 5
 batch_size = 5
@@ -34,16 +25,14 @@ beta_1 = 0.5
 
 L = 15
 M = 15
-d_l = 20
+d_l = 10
 d_g = 40
-d_p = 4
-multi_texture = True
+d_p = 2
+multi_texture = False
 
-# G = SingleTextureGenerator(L, M, d_l, d_g, d_p, batch_size, device).to(device)
-G = MultiTextureGenerator(L, M, d_l, d_g, d_p, batch_size, device).to(device)
-G.apply(weights_init)
-D = Discriminator().to(device)
-D.apply(weights_init)
+G = SingleTextureGenerator(L, M, d_l, d_g, d_p, batch_size, device).to(device)
+# G = MultiTextureGenerator(L, M, d_l, d_g, d_p, batch_size, device).to(device)
+D = Discriminator(device).to(device)
 
 criterion = nn.BCELoss()
 
@@ -53,8 +42,10 @@ optimizerG = optim.Adam(G.parameters(), lr=lr, betas=(beta_1, 0.999))
 
 losses = {'d': [], 'g': [], 'D(x)': [], 'D_G(z)_d': [], 'D_G(z)_g': []}
 
+n = 4
+root_n = int(np.sqrt(n))
 plt.ion()
-fig, axes = plt.subplots(4, 4)
+fig, axes = plt.subplots(root_n, root_n)
 axes = axes.ravel()
 
 for epoch in range(epochs):
@@ -73,11 +64,11 @@ for epoch in range(epochs):
 
         # fake
         Z_l = torch.Tensor(sample_Z_l(batch_size, d_l, L, M)).to(device)
-        z_g = torch.Tensor(sample_z_g(batch_size, d_g)).to(device)
-        phi = torch.FloatTensor(batch_size, d_p, 1, 1, device=device).uniform_(0, 2*np.pi)
+        Z_g = torch.Tensor(sample_Z_g(batch_size, d_g, L, M)).to(device)
+        phi = torch.FloatTensor(batch_size, d_p, 1, 1, device=device).uniform_(0.0, 2*np.pi)
 
         if multi_texture:
-            fake_samples = G(Z_l, z_g, phi)
+            fake_samples = G(Z_l, Z_g, phi)
         else:
             fake_samples = G(Z_l, phi)
         fake_label = torch.full((batch_size, L, M), 0, device=device)
@@ -107,14 +98,12 @@ for epoch in range(epochs):
     print('Epoch: {}/{}   D_loss: {}   G_loss: {}   D(x): {}   D(G(z)): {} - {}'.format(*outputs))
 
     # generate images to display
-    n = 16
-    root_n = int(np.sqrt(n))
 
     Z_l = torch.Tensor(sample_Z_l(n, d_l, L, M)).to(device)
-    z_g = torch.Tensor(sample_z_g(n, d_g)).to(device)
-    phi = torch.FloatTensor(n, d_p, 1, 1, device=device).uniform_(0, 2*np.pi)
+    Z_g = torch.Tensor(sample_Z_g(n, d_g, L, M)).to(device)
+    phi = torch.FloatTensor(n, d_p, 1, 1, device=device).uniform_(0.0, 2*np.pi)
     if multi_texture:
-        fake_samples = G(Z_l, z_g, phi)
+        fake_samples = G(Z_l, Z_g, phi)
     else:
         fake_samples = G(Z_l, phi)
     
@@ -124,13 +113,8 @@ for epoch in range(epochs):
         images = fake_samples.cuda().detach().numpy()[:n, :, :, :]
     images = np.transpose(images, (0, 2, 3, 1))
     images = (images*255).astype(np.uint8)
-    
     for i, ax in enumerate(axes):
         ax.imshow(images[i, :, :, ::-1])
         ax.axis('off')
     plt.show()
     plt.pause(0.00001)
-
-    
-
-

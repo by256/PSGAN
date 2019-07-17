@@ -4,8 +4,9 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 import numpy as np
+from scipy import interpolate
 
-from noise_samplers import sample_Z_l, sample_z_g
+from noise_samplers import sample_Z_l, sample_Z_g
 
 
 class BaseModel(nn.Module):
@@ -22,7 +23,7 @@ class BaseModel(nn.Module):
             nn.init.constant_(self.bias.data, 0)
 
     def load_model(self, model_path):
-        self.load_state_dict(torch.load(model_path))
+        self.load_state_dict(torch.load(model_path, map_location=self.device))
         self.eval()
     
 
@@ -82,7 +83,7 @@ class SingleTextureGenerator(BaseModel):
 
     def generate_samples(self, n, detach=True):
         Z_l = torch.Tensor(sample_Z_l(n, self.d_l, self.L, self.M)).to(self.device)
-        phi = torch.FloatTensor(n, self.d_p, 1, 1, device=self.device).uniform_(0, 2*np.pi)
+        phi = torch.FloatTensor(n, self.d_p, 1, 1, device=self.device).uniform_(0.0, 2*np.pi)
         samples = self(Z_l, phi)
         if detach:
             if str(self.device) == 'cpu':
@@ -127,9 +128,11 @@ class MultiTextureGenerator(BaseModel):
         self.weights_init()
 
     
-    def forward(self, Z_l, z_g, phi):
-        Z_g = z_g.unsqueeze(-1).unsqueeze(-1)
-        Z_g = Z_g.repeat(1, 1, self.L, self.M)
+    def forward(self, Z_l, Z_g, phi):
+        # Z_g = z_g.unsqueeze(-1).unsqueeze(-1)
+        # Z_g = Z_g.repeat(1, 1, self.L, self.M)
+        z_g = Z_g[:, :, 0, 0]#.unsqueeze(-1).unsqueeze(-1)
+        print(z_g.shape, Z_g.shape)
         # periodic mlp
         inner_K = self.relu(self.linear1(z_g))
         K1 = self.linear2(inner_K)
@@ -158,7 +161,8 @@ class MultiTextureGenerator(BaseModel):
     def generate_samples(self, n, detach=True):
         Z_l = torch.Tensor(sample_Z_l(n, self.d_l, self.L, self.M)).to(self.device)
         z_g = torch.Tensor(sample_z_g(n, self.d_g)).to(self.device)
-        phi = torch.FloatTensor(n, self.d_p, 1, 1, device=self.device).uniform_(0, 2*np.pi)
+        
+        phi = torch.FloatTensor(n, self.d_p, 1, 1, device=self.device).uniform_(0.0, 2*np.pi)
         samples = self(Z_l, z_g, phi)
         if detach:
             if str(self.device) == 'cpu':
@@ -169,11 +173,35 @@ class MultiTextureGenerator(BaseModel):
             samples = (samples*255).astype(np.uint8)
         return samples
 
+    def morph_textures(self):
+        Z_l = torch.Tensor(sample_Z_l(self.batch_size, self.d_l, self.L, self.M)).to(self.device)
+        z_g = sample_z_g(self.batch_size, self.d_g)
+        Z_g = Z_g.repeat(1, 1, self.L, self.M)
+
+
+        print(Z_l.shape)
+        corners = []
+        for i in range(4):
+            corner = np.random.uniform(size=(-1.0, 1.0, self.d_g,))
+            corners.append(corner)
+        
+        points = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
+
+        grid = []
+        nn = 40
+        for i in range(40):
+            for j in range(40):
+                grid += [np.array([i / (40 - 1.0), j / (40 - 1.0)])]
+
+        morph = interpolate.griddata(points, corners, grid, method='linear')
+        return morph
+
 
 class Discriminator(BaseModel):
 
-    def __init__(self):
+    def __init__(self, device):
         super(Discriminator, self).__init__()
+        self.device = device
         # discriminator layer ops
         self.conv1 = nn.Conv2d(3, 64, 5, 2, 2)
         self.conv2 = nn.Conv2d(64, 128, 5, 2, 2)
