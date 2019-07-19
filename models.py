@@ -129,10 +129,7 @@ class MultiTextureGenerator(BaseModel):
 
     
     def forward(self, Z_l, Z_g, phi):
-        # Z_g = z_g.unsqueeze(-1).unsqueeze(-1)
-        # Z_g = Z_g.repeat(1, 1, self.L, self.M)
-        z_g = Z_g[:, :, 0, 0]#.unsqueeze(-1).unsqueeze(-1)
-        print(z_g.shape, Z_g.shape)
+        z_g = Z_g[:, :, 0, 0]
         # periodic mlp
         inner_K = self.relu(self.linear1(z_g))
         K1 = self.linear2(inner_K)
@@ -177,7 +174,6 @@ class MultiTextureGenerator(BaseModel):
         Z_l = torch.Tensor(sample_Z_l(self.batch_size, self.d_l, self.L, self.M)).to(self.device)
         z_g = sample_z_g(self.batch_size, self.d_g)
         Z_g = Z_g.repeat(1, 1, self.L, self.M)
-
 
         print(Z_l.shape)
         corners = []
